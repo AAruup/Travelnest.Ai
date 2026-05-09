@@ -19,7 +19,7 @@
     <div id="output"></div>
   </main>
 
-  <script type="module" src="main.js"></script>
+  <script type="module" src="/main.js"></script>
 </body>
 </html>body {
   font-family: Arial, sans-serif;
@@ -118,4 +118,23 @@ async function askAI(question) {
   } catch (err) {
     document.getElementById('output').innerText = 'Error: ' + err.message;
   }
-}
+}{
+  "name": "travelnet-ai",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.39.0",
+    "axios": "^1.6.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.0"
+  }
+}export default {
+  server: {
+    port: 3000
+  }
+};
