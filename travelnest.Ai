@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TravelNet AI</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header>
+    <h1>TravelNet AI 🌍</h1>
+  </header>
+
+  <main>
+    <form id="travel-form">
+      <input type="text" id="destination" placeholder="Enter destination..." />
+      <button type="submit">Get Itinerary</button>
+    </form>
+    <div id="output"></div>
+  </main>
+
+  <script type="module" src="main.js"></script>
+</body>
+</html>body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  background: #f9f9f9;
+  color: #333;
+}
+
+header {
+  background: #3498db;
+  color: white;
+  padding: 1rem;
+  text-align: center;
+}
+
+main {
+  padding: 1rem;
+}
+
+form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+input {
+  padding: 1rem;
+  font-size: 1rem;
+  border: 1px solid #ccc;
+  border-radius: 6px;
+}
+
+button {
+  padding: 1rem;
+  font-size: 1rem;
+  background: #3498db;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+button:hover {
+  background: #2980b9;
+}
+
+#output {
+  padding: 1rem;
+  background: white;
+  border-radius: 6px;
+  box-shadow: 0 2px 6px rgba(0,0,0,0.1);
+  min-height: 100px;
+  font-size: 0.95rem;
+  line-height: 1.4;
+}import { createClient } from '@supabase/supabase-js';
+import axios from 'axios';
+
+// Environment variables (set in Netlify dashboard)
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL;
+const SUPABASE_KEY = import.meta.env.VITE_SUPABASE_KEY;
+const ANTHROPIC_KEY = import.meta.env.VITE_ANTHROPIC_KEY;
+
+// Initialize Supabase
+const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+document.getElementById('travel-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const destination = document.getElementById('destination').value.trim();
+  if (!destination) {
+    document.getElementById('output').innerText = "Please enter a destination.";
+    return;
+  }
+  document.getElementById('output').innerText = "Generating itinerary...";
+
+  await askAI(`Suggest a simple 3-day itinerary for ${destination}.`);
+});
+
+async function askAI(question) {
+  try {
+    const response = await axios.post(
+      'https://api.anthropic.com/v1/messages',
+      {
+        model: "claude-3-opus-20240229",
+        max_tokens: 300,
+        messages: [{ role: "user", content: question }]
+      },
+      {
+        headers: {
+          "x-api-key": ANTHROPIC_KEY,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+    document.getElementById('output').innerText = response.data.content[0].text;
+  } catch (err) {
+    document.getElementById('output').innerText = 'Error: ' + err.message;
+  }
+}
