@@ -12,7 +12,7 @@ import { colors, media, radius, spacing, shadows, typography } from '../src/them
 type Mode = 'signin' | 'signup';
 
 export default function AuthScreen() {
-  const { login, register } = useAuth();
+  const { login, register, loginWithGoogle } = useAuth();
   const [mode, setMode] = useState<Mode>('signin');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -108,8 +108,18 @@ export default function AuthScreen() {
 
               <TouchableOpacity
                 testID="auth-google-button"
-                style={styles.googleBtn}
-                onPress={() => Alert.alert('Coming soon', 'Google sign-in arrives in the next update.')}
+                style={[styles.googleBtn, busy && { opacity: 0.7 }]}
+                disabled={busy}
+                onPress={async () => {
+                  setBusy(true);
+                  try {
+                    await loginWithGoogle();
+                  } catch (e) {
+                    Alert.alert('Google sign-in', extractError(e, 'Could not complete sign-in.'));
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
               >
                 <Ionicons name="logo-google" size={20} color={colors.textPrimary} />
                 <Text style={styles.googleText}>Continue with Google</Text>

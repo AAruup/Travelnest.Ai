@@ -29,9 +29,10 @@ export default function ProfileScreen() {
   const [payee, setPayee] = useState('');
   const [savingPayment, setSavingPayment] = useState(false);
 
-  // Music form
-  const [trackTitle, setTrackTitle] = useState('');
-  const [trackArtist, setTrackArtist] = useState('');
+  // Music search/save
+  const [musicQuery, setMusicQuery] = useState('');
+  const [musicResults, setMusicResults] = useState<{ id: string; title: string; creator: string; source: string; url: string }[]>([]);
+  const [musicSearching, setMusicSearching] = useState(false);
   const [musicSaving, setMusicSaving] = useState(false);
 
   const refresh = useCallback(async () => {
@@ -69,13 +70,27 @@ export default function ProfileScreen() {
     } catch (e) { Alert.alert('Sync failed', extractError(e)); }
   };
 
-  const saveTrack = async () => {
-    if (!trackTitle.trim()) { Alert.alert('Track title required'); return; }
+  const searchMusic = async () => {
+    if (!musicQuery.trim()) { Alert.alert('Type a song or artist'); return; }
+    setMusicSearching(true);
+    try {
+      const r = await api.get(`/music/search`, { params: { q: musicQuery, page_size: 10 } });
+      setMusicResults(r.data.results || []);
+    } catch (e) { Alert.alert('Search failed', extractError(e)); }
+    finally { setMusicSearching(false); }
+  };
+
+  const saveTrack = async (track: { title: string; creator: string; source: string; url: string }) => {
     setMusicSaving(true);
     try {
-      await api.post('/music/saves', { title: trackTitle, artist: trackArtist, source: 'device' });
-      setTrackTitle(''); setTrackArtist('');
+      await api.post('/music/saves', {
+        title: track.title,
+        artist: track.creator,
+        source: track.source || 'openverse',
+        url: track.url,
+      });
       await refresh();
+      Alert.alert('Saved', `${track.title} added to offline pack.`);
     } catch (e) { Alert.alert('Failed', extractError(e)); }
     finally { setMusicSaving(false); }
   };
@@ -171,24 +186,60 @@ export default function ProfileScreen() {
 
         {/* Music */}
         <Text style={styles.sectionTitle}>Nova open music pass</Text>
-        <Text style={styles.sectionSub}>Save tracks for offline play during rail or flight journeys.</Text>
+        <Text style={styles.sectionSub}>Search creative-commons audio on Openverse and save for offline.</Text>
         <View style={styles.card}>
-          <TextInput testID="music-title" placeholder="Track title" placeholderTextColor={colors.textSecondary} value={trackTitle} onChangeText={setTrackTitle} style={styles.input} />
-          <TextInput testID="music-artist" placeholder="Artist (optional)" placeholderTextColor={colors.textSecondary} value={trackArtist} onChangeText={setTrackArtist} style={styles.input} />
-          <TouchableOpacity testID="music-save" style={styles.primaryBtn} onPress={saveTrack} disabled={musicSaving}>
-            {musicSaving ? <ActivityIndicator color="#fff" /> : <Text style={styles.primaryBtnText}>Save offline track</Text>}
-          </TouchableOpacity>
+          <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+            <TextInput
+              testID="music-search-input"
+              placeholder="Search artists, moods, instruments…"
+              placeholderTextColor={colors.textSecondary}
+              value={musicQuery}
+              onChangeText={setMusicQuery}
+              style={[styles.input, { flex: 1 }]}
+              onSubmitEditing={searchMusic}
+              returnKeyType="search"
+            />
+            <TouchableOpacity testID="music-search-button" style={styles.searchBtn} onPress={searchMusic} disabled={musicSearching}>
+              {musicSearching ? <ActivityIndicator color="#fff" /> : <Ionicons name="search" size={18} color="#fff" />}
+            </TouchableOpacity>
+          </View>
         </View>
+
+        {musicResults.length > 0 && (
+          <>
+            <Text style={styles.subSection}>Openverse results ({musicResults.length})</Text>
+            {musicResults.map((t) => (
+              <View key={t.id} style={styles.row}>
+                <View style={styles.rowIcon}><Ionicons name="musical-note" size={18} color={colors.primary} /></View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.rowTitle} numberOfLines={1}>{t.title}</Text>
+                  <Text style={styles.rowSub} numberOfLines={1}>{t.creator || 'Unknown'} · {t.source}</Text>
+                </View>
+                <TouchableOpacity
+                  testID={`music-save-${t.id.slice(0, 6)}`}
+                  style={styles.syncBtn}
+                  onPress={() => saveTrack(t)}
+                  disabled={musicSaving}
+                >
+                  <Ionicons name="download" size={14} color={colors.primary} />
+                  <Text style={styles.syncBtnText}>Save</Text>
+                </TouchableOpacity>
+              </View>
+            ))}
+          </>
+        )}
+
+        <Text style={styles.subSection}>Offline pack ({musicTracks.length})</Text>
         {musicTracks.map((t) => (
           <View key={t.id} style={styles.row}>
-            <View style={styles.rowIcon}><Ionicons name="musical-note" size={18} color={colors.primary} /></View>
+            <View style={styles.rowIcon}><Ionicons name="musical-notes" size={18} color={colors.primary} /></View>
             <View style={{ flex: 1 }}>
-              <Text style={styles.rowTitle}>{t.title}</Text>
-              <Text style={styles.rowSub}>{t.artist || 'Unknown artist'} · {t.source}</Text>
+              <Text style={styles.rowTitle} numberOfLines={1}>{t.title}</Text>
+              <Text style={styles.rowSub} numberOfLines={1}>{t.artist || 'Unknown artist'} · {t.source}</Text>
             </View>
           </View>
         ))}
-        {musicTracks.length === 0 && <Text style={styles.empty}>No saved tracks yet.</Text>}
+        {musicTracks.length === 0 && <Text style={styles.empty}>Search Openverse and tap Save to start your offline pack.</Text>}
 
         <TouchableOpacity testID="profile-logout-button" style={styles.logoutBtn} onPress={confirmLogout}>
           <Ionicons name="log-out" size={18} color={colors.danger} />
@@ -229,6 +280,7 @@ const styles = StyleSheet.create({
   rowSub: { ...typography.small, marginTop: 2 },
   syncBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: '#FFEDE8', paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.pill },
   syncBtnText: { color: colors.primary, fontWeight: '700', fontSize: 12 },
+  searchBtn: { width: 48, height: 48, borderRadius: radius.md, backgroundColor: colors.primary, alignItems: 'center', justifyContent: 'center' },
   empty: { ...typography.small, paddingVertical: spacing.sm, textAlign: 'center' },
   logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: colors.surface, borderRadius: radius.pill, paddingVertical: 14, marginTop: spacing.lg, borderWidth: 1, borderColor: colors.danger },
   logoutText: { color: colors.danger, fontWeight: '800', fontSize: 15 },

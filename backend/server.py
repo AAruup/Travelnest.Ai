@@ -18,12 +18,17 @@ from typing import Optional, List, Literal
 
 import jwt
 import bcrypt
+import httpx
 from dotenv import load_dotenv
-from fastapi import FastAPI, APIRouter, Depends, HTTPException, status
+from fastapi import FastAPI, APIRouter, Depends, HTTPException, Header, Request, status
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, EmailStr, Field
 from starlette.middleware.cors import CORSMiddleware
+from emergentintegrations.payments.stripe.checkout import (
+    StripeCheckout,
+    CheckoutSessionRequest,
+)
 
 ROOT_DIR = Path(__file__).parent
 load_dotenv(ROOT_DIR / ".env")
@@ -35,6 +40,9 @@ JWT_SECRET = os.environ["JWT_SECRET"]
 JWT_ALGORITHM = os.environ.get("JWT_ALGORITHM", "HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.environ.get("ACCESS_TOKEN_EXPIRE_MINUTES", 10080))
 EMERGENT_LLM_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
+STRIPE_API_KEY = os.environ.get("STRIPE_API_KEY", "")
+EMERGENT_SESSION_URL = "https://demobackend.emergentagent.com/auth/v1/env/oauth/session-data"
+OPENVERSE_AUDIO_URL = "https://api.openverse.org/v1/audio/"
 
 logging.basicConfig(level=logging.INFO,
                     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
@@ -76,17 +84,50 @@ def create_token(user_id: str, email: str) -> str:
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
+async def _user_from_session_token(token: str) -> Optional[dict]:
+    """Look up a user via an Emergent Google session token."""
+    sess = await db.user_sessions.find_one({"session_token": token}, {"_id": 0})
+    if not sess:
+        return None
+    expires_at = sess.get("expires_at")
+    if expires_at:
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+        if expires_at < utcnow():
+            return None
+    return await db.users.find_one(
+        {"id": sess["user_id"]}, {"_id": 0, "password_hash": 0}
+    )
+
+
 async def get_current_user(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
 ) -> dict:
-    if credentials is None:
+    token: Optional[str] = None
+    if credentials is not None:
+        token = credentials.credentials
+    else:
+        # Fallback: session_token cookie (web flow).
+        token = request.cookies.get("session_token")
+
+    if not token:
         raise HTTPException(status_code=401, detail="Not authenticated")
+
+    # 1) Try as Emergent Google session token.
+    user = await _user_from_session_token(token)
+    if user:
+        return user
+
+    # 2) Try as JWT.
     try:
-        payload = jwt.decode(credentials.credentials, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
     except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Invalid or expired token")
 
-    user = await db.users.find_one({"id": payload.get("sub")}, {"_id": 0, "password_hash": 0})
+    user = await db.users.find_one(
+        {"id": payload.get("sub")}, {"_id": 0, "password_hash": 0}
+    )
     if not user:
         raise HTTPException(status_code=401, detail="User not found")
     return user
@@ -474,6 +515,214 @@ async def stats(current=Depends(get_current_user)):
 @api.get("/")
 async def root():
     return {"app": "TravelNest AI", "status": "ok", "time": utcnow().isoformat()}
+
+
+# === Google Auth (Emergent) =================================================
+class GoogleSessionExchange(BaseModel):
+    redirect_url: Optional[str] = None  # informational only
+
+
+@api.post("/auth/google/session")
+async def google_session(
+    x_session_id: Optional[str] = Header(default=None, alias="X-Session-ID"),
+):
+    """Exchange the Emergent Google `session_id` (from the redirect hash)
+    for a persistent session_token. Creates/updates the user record."""
+    if not x_session_id:
+        raise HTTPException(status_code=400, detail="Missing X-Session-ID header")
+
+    async with httpx.AsyncClient(timeout=15.0) as client_http:
+        try:
+            r = await client_http.get(
+                EMERGENT_SESSION_URL,
+                headers={"X-Session-ID": x_session_id},
+            )
+            r.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise HTTPException(status_code=401, detail=f"Emergent auth failed: {exc}")
+        data = r.json()
+
+    email = (data.get("email") or "").lower()
+    if not email:
+        raise HTTPException(status_code=502, detail="Emergent auth missing email")
+
+    name = data.get("name", "")
+    picture = data.get("picture", "")
+    session_token = data.get("session_token")
+    if not session_token:
+        raise HTTPException(status_code=502, detail="No session_token in Emergent response")
+
+    existing = await db.users.find_one({"email": email})
+    if existing:
+        user_id = existing["id"]
+        await db.users.update_one(
+            {"id": user_id},
+            {"$set": {
+                "auth_provider": "google",
+                "picture": picture,
+                "full_name": existing.get("full_name") or name,
+            }},
+        )
+    else:
+        user_id = str(uuid.uuid4())
+        await db.users.insert_one({
+            "id": user_id,
+            "email": email,
+            "full_name": name,
+            "mobile": "",
+            "picture": picture,
+            "auth_provider": "google",
+            "password_hash": "",
+            "created_at": utcnow(),
+        })
+
+    await db.user_sessions.insert_one({
+        "user_id": user_id,
+        "session_token": session_token,
+        "expires_at": utcnow() + timedelta(days=7),
+        "created_at": utcnow(),
+    })
+
+    user_doc = await db.users.find_one(
+        {"id": user_id}, {"_id": 0, "password_hash": 0}
+    )
+    return {
+        "access_token": session_token,
+        "token_type": "bearer",
+        "user": user_doc,
+    }
+
+
+@api.post("/auth/logout")
+async def logout(current=Depends(get_current_user),
+                 credentials: Optional[HTTPAuthorizationCredentials] = Depends(security)):
+    if credentials:
+        await db.user_sessions.delete_one({"session_token": credentials.credentials})
+    return {"ok": True}
+
+
+# === Stripe Checkout =======================================================
+class CheckoutCreate(BaseModel):
+    purpose: str  # 'partner_booking' | 'music_pass' | 'rail_food' | 'custom'
+    amount: float = Field(..., gt=0)
+    currency: str = "usd"
+    description: str = ""
+    metadata: Optional[dict] = None
+
+
+def _stripe_client(host_url: str) -> StripeCheckout:
+    if not STRIPE_API_KEY:
+        raise HTTPException(status_code=500, detail="Stripe key not configured")
+    return StripeCheckout(api_key=STRIPE_API_KEY)
+
+
+@api.post("/payments/checkout/session")
+async def create_checkout(req: CheckoutCreate, request: Request,
+                          current=Depends(get_current_user)):
+    """Create a Stripe Checkout Session and persist the local payment record."""
+    origin = request.headers.get("origin") or str(request.base_url).rstrip("/")
+    success_url = f"{origin}/payment-return?status=success&session_id={{CHECKOUT_SESSION_ID}}"
+    cancel_url = f"{origin}/payment-return?status=cancel"
+
+    stripe_client = _stripe_client(origin)
+    metadata = {
+        "user_id": current["id"],
+        "purpose": req.purpose,
+        **{k: str(v) for k, v in (req.metadata or {}).items()},
+    }
+    session = await stripe_client.create_checkout_session(
+        CheckoutSessionRequest(
+            amount=req.amount,
+            currency=req.currency,
+            success_url=success_url,
+            cancel_url=cancel_url,
+            metadata=metadata,
+        )
+    )
+
+    doc = {
+        "id": str(uuid.uuid4()),
+        "user_id": current["id"],
+        "purpose": req.purpose.upper(),
+        "amount": req.amount,
+        "currency": req.currency,
+        "description": req.description,
+        "status": "initiated",
+        "stripe_session_id": session.session_id,
+        "stripe_url": session.url,
+        "payee": "Stripe",
+        "created_at": utcnow(),
+    }
+    await db.payments.insert_one(doc)
+    doc.pop("_id", None)
+    return {"checkout_url": session.url, "session_id": session.session_id, "payment": doc}
+
+
+@api.get("/payments/checkout/status/{session_id}")
+async def checkout_status(session_id: str, request: Request,
+                          current=Depends(get_current_user)):
+    stripe_client = _stripe_client(str(request.base_url))
+    status_resp = await stripe_client.get_checkout_status(session_id)
+
+    payment_doc = await db.payments.find_one(
+        {"stripe_session_id": session_id, "user_id": current["id"]},
+        {"_id": 0},
+    )
+
+    new_status = payment_doc["status"] if payment_doc else "initiated"
+    if status_resp.payment_status == "paid":
+        new_status = "synced"
+    elif status_resp.status == "expired":
+        new_status = "cancelled"
+
+    if payment_doc and payment_doc["status"] != new_status:
+        await db.payments.update_one(
+            {"stripe_session_id": session_id, "user_id": current["id"]},
+            {"$set": {"status": new_status, "synced_at": utcnow() if new_status == "synced" else None}},
+        )
+        payment_doc["status"] = new_status
+
+    return {
+        "status": status_resp.status,
+        "payment_status": status_resp.payment_status,
+        "amount_total": status_resp.amount_total,
+        "currency": status_resp.currency,
+        "metadata": status_resp.metadata,
+        "payment": payment_doc,
+    }
+
+
+# === Music search via Openverse ============================================
+@api.get("/music/search")
+async def music_search(q: str = "", page_size: int = 12,
+                       current=Depends(get_current_user)):
+    if not q.strip():
+        return {"results": [], "total": 0}
+    async with httpx.AsyncClient(timeout=15.0) as client_http:
+        try:
+            r = await client_http.get(
+                OPENVERSE_AUDIO_URL,
+                params={"q": q, "page_size": max(1, min(page_size, 20))},
+                headers={"User-Agent": "TravelNestAI/1.0"},
+            )
+            r.raise_for_status()
+        except httpx.HTTPError as exc:
+            raise HTTPException(status_code=502, detail=f"Openverse error: {exc}")
+        data = r.json()
+
+    results = []
+    for item in data.get("results", [])[:page_size]:
+        results.append({
+            "id": item.get("id") or item.get("identifier"),
+            "title": item.get("title") or "Untitled",
+            "creator": item.get("creator") or "",
+            "url": item.get("url") or "",
+            "thumbnail": item.get("thumbnail") or "",
+            "duration": item.get("duration") or 0,
+            "license": item.get("license") or "",
+            "source": item.get("source") or item.get("source_name") or "openverse",
+        })
+    return {"results": results, "total": data.get("result_count") or len(results)}
 
 
 # === Mount =================================================================

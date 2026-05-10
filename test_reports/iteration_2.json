@@ -1,0 +1,67 @@
+{
+  "summary": "Iteration 2 backend + frontend tested. 29/30 backend pytest tests pass (all v1 + 9 new). One failure: GET /api/payments/checkout/status/{sid} → 500 because emergentintegrations StripeCheckout.get_checkout_status calls real Stripe Session.retrieve while create goes through the Emergent Stripe proxy, so test sessions don't exist on real Stripe. Frontend: Continue-with-Google redirects to https://auth.emergentagent.com correctly; JWT login works; Partner Pay $9.99 button calls /api/payments/checkout/session and redirects to checkout.stripe.com (US$9.99); Profile music search returns 10 Openverse results, Save persists; /payment-return renders 'Confirming payment…' for status=success and 'Payment cancelled' for status=cancel. Two frontend issues found: (a) Profile 'Pending' list filter excludes Stripe 'initiated' payments (only matches status==='pending'), so partner-booking payments never appear in the user-visible queue; (b) logout via Alert.alert on RN-web didn't redirect to /auth in automated test (likely RN-web Alert limitation, but worth verifying interactively).",
+  "backend_issues": {
+    "critical": [
+      {
+        "endpoint": "GET /api/payments/checkout/status/{session_id}",
+        "issue": "Returns 500 InvalidRequestError 'No such checkout.session'. Root cause: emergentintegrations.payments.stripe.checkout.StripeCheckout.get_checkout_status uses the official stripe SDK's Session.retrieve which hits api.stripe.com directly, while create_checkout_session is sent through https://integrations.emergentagent.com/stripe/v1/checkout/sessions (Emergent proxy). Test-mode sessions created via the proxy are not visible to real Stripe, so retrieve always 404s. This blocks the /payment-return success polling -> payments can never auto-flip from 'initiated' to 'synced'.",
+        "priority": "HIGH"
+      }
+    ],
+    "minor": []
+  },
+  "frontend_issues": {
+    "ui_bugs": [
+      {
+        "component": "app/(tabs)/profile.tsx (line 105)",
+        "issue": "pending list filter is `payments.filter(p => p.status === 'pending')`. Stripe checkout rows are saved with status 'initiated', so they never appear under 'Pending' (nor under 'Synced' until the status endpoint flips them). User cannot see the Stripe payment they just kicked off. Suggested fix: treat status !== 'synced' as pending (i.e. include 'initiated', 'pending', 'cancelled') OR add a third 'Initiated' subsection.",
+        "testID": "profile-pending-list",
+        "priority": "HIGH"
+      },
+      {
+        "component": "app/(tabs)/profile.tsx confirmLogout",
+        "issue": "Uses RN Alert.alert. In automated browser tests the destructive 'Logout' button inside the alert was not auto-clicked, so token was not cleared and the page stayed at /profile. May be a test-only artifact, but consider replacing with a custom in-app modal that is testable (and works on web reliably). Please verify manually that pressing Logout -> Logout in the dialog clears the token and routes to /auth.",
+        "testID": "profile-logout-button",
+        "priority": "MEDIUM"
+      }
+    ],
+    "integration_issues": [
+      {
+        "flow": "Partner pay -> /payment-return",
+        "issue": "Loader shows 'Confirming payment…' but the polling call to /api/payments/checkout/status/{sid} returns 500 (see backend issue), so the payment record will never auto-sync after a real Stripe payment.",
+        "affected_testIDs": ["partner-pay-*", "payment-return"]
+      }
+    ],
+    "design_issues": [],
+    "react_native_issues": []
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_iteration2.py",
+    "/app/backend/tests/test_travelnest_api.py",
+    "/app/test_reports/pytest/iteration_2.xml"
+  ],
+  "action_items": [
+    "BACKEND/HIGH: Fix /api/payments/checkout/status. Either (a) call the Emergent Stripe proxy directly (httpx GET https://integrations.emergentagent.com/stripe/v1/checkout/sessions/{id} with sk_test_emergent), or (b) set stripe.api_base to the proxy URL before retrieve, or (c) wait for emergentintegrations to expose a proxy-aware retrieve. Until this is fixed, payment-return cannot complete the synced flip.",
+    "FRONTEND/HIGH: Update Profile pending filter so Stripe 'initiated' payments are visible (or render a separate 'Awaiting payment' section). Otherwise the spec line 'a new payment row appears in Profile > Pending with status initiated/synced' is not met.",
+    "FRONTEND/MEDIUM: Validate logout flow on web manually. If RN-web Alert.alert misbehaves, swap it for a controlled <Modal> for reliable test coverage.",
+    "INFO: Continue-with-Google button correctly redirects to https://auth.emergentagent.com/?redirect=... (verified)."
+  ],
+  "critical_code_review_comments": [
+    "server.py is single-file ~740 lines — still under 700-line guideline by a small margin; consider splitting auth/payments/music into separate routers.",
+    "/api/auth/logout swallows DB errors and always returns ok=True. That is acceptable but should at least log the deletion failure.",
+    "checkout_status uses HTTPException 500 by default for Stripe library errors; consider mapping CheckoutError to 502 with a friendlier message so the frontend can show a clear retry banner.",
+    "Profile pending filter (status === 'pending') is too narrow given the new 'initiated' status. Always update consumers when adding a new status value."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_iteration2.py (new)"
+  ],
+  "success_rate": {
+    "backend": "97% (29/30 pytest)",
+    "frontend": "~85% (Google redirect, JWT login, partner Stripe redirect, music search/save, payment-return success+cancel all OK; Pending list and logout-via-Alert flagged)"
+  },
+  "seed_data_creation": "Iteration2 fixture seeds and tears down a temporary google-auth user + user_sessions row per test in MongoDB (DB_NAME=travelnest). All test data is prefixed TEST_ where applicable.",
+  "retest_needed": true,
+  "should_main_agent_self_test": true,
+  "context_for_next_testing_agent": "Run pytest /app/backend/tests/ -v. The status endpoint will keep failing until the emergentintegrations StripeCheckout.get_checkout_status path is routed through the Emergent Stripe proxy. Demo creds: demo@travelnest.ai / Pass1234. Frontend public URL: EXPO_PUBLIC_BACKEND_URL from /app/frontend/.env. After fixing Profile filter, look for the Stripe-initiated rows under 'Pending' on the Profile screen.",
+  "rca_of_issue": "Stripe status 500 RCA: emergentintegrations create_checkout_session sends POST to https://integrations.emergentagent.com/stripe/v1/checkout/sessions (proxy), returning a cs_test_* session that exists only inside the Emergent proxy's Stripe sandbox. get_checkout_status, however, calls stripe.checkout.Session.retrieve(session_id) using the official stripe-python SDK which targets api.stripe.com — the session is unknown there and Stripe responds with 'No such checkout.session'. The library wraps it as CheckoutError, FastAPI surfaces 500. Reproduction: POST /api/payments/checkout/session, then immediately GET /api/payments/checkout/status/{session_id}. Mitigation: either use stripe.api_base override before retrieve, or replace the call with an httpx GET to the proxy retrieve URL using STRIPE_API_KEY."
+}

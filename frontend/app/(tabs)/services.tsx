@@ -1,8 +1,9 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, ImageBackground, Alert,
-  ActivityIndicator,
+  ActivityIndicator, Platform,
 } from 'react-native';
+import * as WebBrowser from 'expo-web-browser';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { api, extractError } from '../../src/api';
@@ -308,16 +309,60 @@ const PartnerHub = () => {
       </View>
 
       <SectionHeader title="Saved partner leads" count={list.length} />
-      {list.map((p) => (
-        <View key={p.id} style={styles.row}>
-          <View style={styles.rowIcon}><Ionicons name="business" size={18} color={colors.primary} /></View>
-          <View style={{ flex: 1 }}>
-            <Text style={styles.rowTitle}>{p.name} · {p.partner_type}</Text>
-            <Text style={styles.rowSub}>{p.city || '—'} · {p.contact || 'no contact'}</Text>
-          </View>
-        </View>
-      ))}
+      {list.map((p) => <PartnerRow key={p.id} partner={p} />)}
       {list.length === 0 && <Empty text="No partner leads yet." />}
+    </View>
+  );
+};
+
+const openCheckout = async (url: string) => {
+  if (Platform.OS === 'web') {
+    if (typeof window !== 'undefined') window.location.href = url;
+    return;
+  }
+  await WebBrowser.openBrowserAsync(url, { dismissButtonStyle: 'cancel' });
+};
+
+const PartnerRow = ({ partner }: { partner: Partner }) => {
+  const [busy, setBusy] = useState(false);
+  const pay = async () => {
+    setBusy(true);
+    try {
+      const r = await api.post('/payments/checkout/session', {
+        purpose: 'partner_booking',
+        amount: 9.99,
+        currency: 'usd',
+        description: `Deposit · ${partner.name}`,
+        metadata: { partner_id: partner.id, partner_name: partner.name },
+      });
+      await openCheckout(r.data.checkout_url);
+    } catch (e) {
+      Alert.alert('Could not open checkout', extractError(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <View style={styles.row}>
+      <View style={styles.rowIcon}><Ionicons name="business" size={18} color={colors.primary} /></View>
+      <View style={{ flex: 1 }}>
+        <Text style={styles.rowTitle}>{partner.name} · {partner.partner_type}</Text>
+        <Text style={styles.rowSub}>{partner.city || '—'} · {partner.contact || 'no contact'}</Text>
+      </View>
+      <TouchableOpacity
+        testID={`partner-pay-${partner.id.slice(0, 6)}`}
+        style={styles.payBtn}
+        onPress={pay}
+        disabled={busy}
+      >
+        {busy ? <ActivityIndicator color="#fff" /> : (
+          <>
+            <Ionicons name="card" size={14} color="#fff" />
+            <Text style={styles.payBtnText}>Pay $9.99</Text>
+          </>
+        )}
+      </TouchableOpacity>
     </View>
   );
 };
@@ -384,6 +429,8 @@ const styles = StyleSheet.create({
   rowIcon: { width: 36, height: 36, borderRadius: radius.md, backgroundColor: colors.surfaceMuted, alignItems: 'center', justifyContent: 'center' },
   rowTitle: { fontWeight: '700', color: colors.textPrimary },
   rowSub: { ...typography.small, marginTop: 2 },
+  payBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, backgroundColor: colors.primary, paddingHorizontal: 12, paddingVertical: 8, borderRadius: radius.pill },
+  payBtnText: { color: '#fff', fontWeight: '700', fontSize: 12 },
   empty: { padding: spacing.md, alignItems: 'center' },
   emptyText: { ...typography.small },
 });

@@ -1,4 +1,6 @@
 // Shared theme tokens for TravelNest AI.
+import { Platform } from 'react-native';
+
 export const colors = {
   primary: '#FF5A36',
   primaryActive: '#E0482B',
@@ -20,21 +22,16 @@ export const spacing = { xs: 4, sm: 8, md: 16, lg: 24, xl: 32, xxl: 48 };
 
 export const radius = { sm: 8, md: 16, lg: 24, xl: 32, pill: 9999 };
 
+// Use the modern `boxShadow` prop (RN 0.79+) and keep `elevation` for Android.
 export const shadows = {
-  subtle: {
-    shadowColor: '#0A192F',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  strong: {
-    shadowColor: '#FF5A36',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 24,
-    elevation: 8,
-  },
+  subtle: Platform.select({
+    web: { boxShadow: '0px 4px 12px rgba(10,25,47,0.08)' },
+    default: { boxShadow: '0px 4px 12px rgba(10,25,47,0.08)', elevation: 4 },
+  }) as object,
+  strong: Platform.select({
+    web: { boxShadow: '0px 8px 24px rgba(255,90,54,0.25)' },
+    default: { boxShadow: '0px 8px 24px rgba(255,90,54,0.25)', elevation: 8 },
+  }) as object,
 };
 
 export const typography = {

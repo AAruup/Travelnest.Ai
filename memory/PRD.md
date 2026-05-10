@@ -39,12 +39,8 @@ app prepares travellers to spend on hotels, food, and music passes, which
 hands TravelNest revenue-share opportunities with onboarded vendors.
 
 ## Non-Goals (this iteration)
-- Real Google OAuth (button placeholder)
-- Stripe live payment capture (queue + manual sync only)
-- Spotify / Openverse live audio (saved-track entries only)
-- SMS / Email push notifications
+- SMS / Email push notifications (still DB-only)
 
 ## Open Items
-- Productionise the JWT secret (`/app/backend/.env`).
-- Wire actual map/route ETA service when partner data is available.
-- Enable real online-payment settlement via Stripe.
+- Real per-product Stripe pricing tiers (currently fixed $9.99 partner deposit).
+- Audio streaming player UI for saved Openverse tracks.
