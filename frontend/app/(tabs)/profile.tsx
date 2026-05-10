@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Modal,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator,
 } from 'react-native';
+import { useFocusEffect } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../src/auth';
@@ -43,6 +44,9 @@ export default function ProfileScreen() {
     } catch {}
   }, []);
   useEffect(() => { refresh(); }, [refresh]);
+  // Re-fetch every time the Profile tab gains focus so Stripe rows created
+  // on the Services tab show up under Pending immediately.
+  useFocusEffect(useCallback(() => { refresh(); }, [refresh]));
 
   const queueQuick = async (code: string, desc: string) => {
     try {
@@ -312,7 +316,12 @@ const styles = StyleSheet.create({
   logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: colors.surface, borderRadius: radius.pill, paddingVertical: 14, marginTop: spacing.lg, borderWidth: 1, borderColor: colors.danger },
   logoutText: { color: colors.danger, fontWeight: '800', fontSize: 15 },
   footer: { ...typography.micro, textAlign: 'center', marginTop: spacing.md },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(10,25,47,0.55)', alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
+  modalOverlay: {
+    position: 'absolute', top: 0, left: 0, right: 0, bottom: 0,
+    backgroundColor: 'rgba(10,25,47,0.55)',
+    alignItems: 'center', justifyContent: 'center', padding: spacing.lg,
+    zIndex: 10,
+  },
   modalCard: { backgroundColor: colors.surface, borderRadius: radius.xl, padding: spacing.lg, width: '100%', maxWidth: 360 },
   modalTitle: { ...typography.h3, marginBottom: spacing.xs },
   modalSub: { ...typography.small, marginBottom: spacing.md },
