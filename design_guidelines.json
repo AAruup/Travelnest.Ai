@@ -1,0 +1,177 @@
+{
+  "theme": "LIGHT",
+  "archetype": "1 - Organic & Earthy (Customized for Bold Vibrant Travel)",
+  "color_palette": {
+    "primary": "#FF5A36",
+    "primary_active": "#E0482B",
+    "secondary": "#0A192F",
+    "background": "#F5F5F0",
+    "surface": "#FFFFFF",
+    "text_primary": "#0A192F",
+    "text_secondary": "#5C6B89",
+    "text_inverse": "#FFFFFF",
+    "accent_success": "#10B981",
+    "accent_warning": "#F59E0B",
+    "accent_danger": "#EF4444",
+    "overlay": "rgba(10, 25, 47, 0.4)"
+  },
+  "typography": {
+    "instructions": "Use React Native System fonts with explicit weights. Avoid Inter for headings; use heavy weights for high-contrast impact.",
+    "headings": {
+      "fontFamily": "System",
+      "fontWeight": "900",
+      "letterSpacing": -0.5
+    },
+    "body": {
+      "fontFamily": "System",
+      "fontWeight": "400",
+      "letterSpacing": 0
+    },
+    "sizes": {
+      "h1": 36,
+      "h2": 28,
+      "h3": 22,
+      "h4": 18,
+      "body": 16,
+      "small": 14,
+      "micro": 12
+    }
+  },
+  "spacing_and_layout": {
+    "container_padding": 24,
+    "element_spacing": 16,
+    "border_radius": {
+      "sm": 8,
+      "md": 16,
+      "lg": 24,
+      "xl": 32,
+      "pill": 9999
+    },
+    "shadows": {
+      "subtle": {
+        "shadowColor": "#0A192F",
+        "shadowOffset": { "width": 0, "height": 4 },
+        "shadowOpacity": 0.08,
+        "shadowRadius": 12,
+        "elevation": 4
+      },
+      "strong": {
+        "shadowColor": "#FF5A36",
+        "shadowOffset": { "width": 0, "height": 8 },
+        "shadowOpacity": 0.2,
+        "shadowRadius": 24,
+        "elevation": 8
+      }
+    }
+  },
+  "media_urls": {
+    "hero_vacation": {
+      "url": "https://images.unsplash.com/photo-1542815871-b8e4b3253424?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1Mjh8MHwxfHNlYXJjaHwyfHx0cmF2ZWwlMjB2YWNhdGlvbiUyMHN1bnNldHxlbnwwfHx8fDE3Nzg0Mzg0NzR8MA&ixlib=rb-4.1.0&q=85",
+      "description": "Golden hour view at ocean - Use for Travel home banner"
+    },
+    "train_food": {
+      "url": "https://images.unsplash.com/photo-1640895252035-6b31cf4a9e5a?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA1MDZ8MHwxfHNlYXJjaHwxfHx0cmFpbiUyMGZvb2QlMjBlYXRpbmd8ZW58MHx8fHwxNzc4NDM4NDc0fDA&ixlib=rb-4.1.0&q=85",
+      "description": "Gourmet meal aesthetic - Use for Rail Food banner"
+    },
+    "airport_lounge": {
+      "url": "https://images.unsplash.com/photo-1504717680241-00f3d96a933d?crop=entropy&cs=srgb&fm=jpg&ixid=M3w4NjA2MDV8MHwxfHNlYXJjaHwxfHxhaXJwb3J0JTIwbG91bmdlJTIwd2luZG93fGVufDB8fHx8MTc3ODQzODQ3NHww&ixlib=rb-4.1.0&q=85",
+      "description": "White airplane - Use for Plane Services banner"
+    },
+    "abstract_travel_map_bg": {
+      "url": "https://static.prod-images.emergentagent.com/jobs/86864a07-4998-4ad9-a5b8-edfebc9cb823/images/8107942b5ba65b781d0d75cdcaa5e32f2df60a2065b89f7faf40111644288f05.png",
+      "description": "Bold abstract topography - Use for splash screen or auth background"
+    },
+    "nova_ai_avatar": {
+      "url": "https://static.prod-images.emergentagent.com/jobs/86864a07-4998-4ad9-a5b8-edfebc9cb823/images/0636b454a8f8406b789c76a6449af4ae23c147c6fd32d39071c7e37b16e58ab7.png",
+      "description": "Glowing AI sphere - Use for Nova AI Chat header avatar"
+    },
+    "family_safety_shield": {
+      "url": "https://static.prod-images.emergentagent.com/jobs/86864a07-4998-4ad9-a5b8-edfebc9cb823/images/dfca3ce18273d35cb381c1b79db36b5d6afc83bcfd50c52d64a18876676894bf.png",
+      "description": "Calm safety shield - Use for Family Safety Room header"
+    }
+  },
+  "component_patterns": {
+    "buttons": {
+      "primary": "background: primary (#FF5A36), borderRadius: pill, paddingVertical: 16, alignItems: center, shadow: strong",
+      "secondary": "background: surface (#FFFFFF), borderWidth: 1, borderColor: text_secondary, borderRadius: pill, paddingVertical: 16",
+      "action_chip": "background: surface, borderRadius: md, padding: 12, flexDirection: row, shadow: subtle. Used for SAFE/DELAY/ETA/SOS."
+    },
+    "cards": {
+      "surface": "background: surface, borderRadius: lg, padding: 20, shadow: subtle, overflow: hidden",
+      "bento_large": "background: secondary (#0A192F), borderRadius: xl, padding: 24, color: text_inverse"
+    },
+    "inputs": {
+      "text": "background: surface, borderWidth: 1, borderColor: rgba(92,107,137,0.2), borderRadius: md, padding: 16, fontSize: 16, color: text_primary",
+      "search": "background: background, borderRadius: pill, padding: 12, paddingHorizontal: 20, fontSize: 16"
+    }
+  },
+  "screen_blueprints": {
+    "Auth": {
+      "layout": "ImageBackground (abstract_travel_map_bg) taking full screen, with a bottom sheet (Surface) containing login forms.",
+      "components": [
+        "Header text: 'TravelNest' (900 weight, huge)",
+        "Email/Password inputs",
+        "Primary Button: 'Sign In'",
+        "Google Social Login Button (Secondary style with Google icon)"
+      ]
+    },
+    "Home": {
+      "layout": "ScrollView with generous padding (24px).",
+      "components": [
+        "Header: Greeting + Avatar",
+        "Hero Bento Card: 'Journey Health' (Dark navy background, bold primary stats)",
+        "Horizontal ScrollView: Quick Actions (Chips)",
+        "Image Card: 'Upcoming Trip' featuring hero_vacation image."
+      ]
+    },
+    "NovaAI": {
+      "layout": "Flex-1 Container with Chat UI.",
+      "components": [
+        "Header: Center aligned nova_ai_avatar (w: 48, h: 48, rounded-full) + 'Nova Assistant' text.",
+        "FlatList: Chat messages (User messages in Primary bubble, AI in Surface bubble).",
+        "Footer: Input field + Send icon button."
+      ]
+    },
+    "Safety": {
+      "layout": "ScrollView with a map or location pin header.",
+      "components": [
+        "Header image: family_safety_shield",
+        "GPS Status Card: 'Last Ping: 2 mins ago' with location permission prompt.",
+        "Grid (2 columns): Quick Action chips (SAFE, DELAY, ETA, SOS - SOS in accent_danger).",
+        "List: Emergency Contacts."
+      ]
+    },
+    "Services": {
+      "layout": "ScrollView with service categories.",
+      "components": [
+        "Section: Rail Food with train_food image as banner, inputs for coach/seat.",
+        "Section: Plane Services with airport_lounge image, flight number input.",
+        "Section: Hotel & Partner Hub (Chips for service types, list of saved leads)."
+      ]
+    },
+    "Profile_Settings": {
+      "layout": "ScrollView.",
+      "components": [
+        "User Info Card",
+        "Section: Offline Payment Queue (List of pending FOOD/HOTL/RIDE/PASS)",
+        "Section: Open Music Pass / Saved Tracks",
+        "Logout Button (accent_danger text)"
+      ]
+    }
+  },
+  "navigation": {
+    "type": "BottomTabNavigator",
+    "tabs": [
+      { "name": "Home", "icon": "home" },
+      { "name": "Nova AI", "icon": "sparkles" },
+      { "name": "Services", "icon": "briefcase" },
+      { "name": "Safety", "icon": "shield-check" },
+      { "name": "Profile", "icon": "user" }
+    ],
+    "style": "background: surface, borderTopWidth: 0, shadow: subtle, activeColor: primary, inactiveColor: text_secondary"
+  },
+  "testing": {
+    "test_id_rule": "MUST add testID property to all TouchableOpacity, TextInput, FlatList, and key Text elements to support end-to-end testing.",
+    "convention": "Use kebab-case, role-based format (e.g., testID='login-submit-button', testID='home-safety-chip')"
+  }
+}
