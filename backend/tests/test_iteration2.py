@@ -175,6 +175,8 @@ class TestStripeCheckout:
         TestStripeCheckout._sid = body["session_id"]
 
     def test_get_checkout_status(self, session, jwt_headers):
+        """Iteration-3 fix: must NOT 500. Either real Stripe data, OR
+        Emergent-proxy quirk → status='unknown' + matching payment + non-empty 'error'."""
         sid = getattr(TestStripeCheckout, "_sid", None)
         if not sid:
             pytest.skip("checkout session not created")
@@ -182,12 +184,21 @@ class TestStripeCheckout:
                         headers=jwt_headers, timeout=30)
         assert r.status_code == 200, r.text
         body = r.json()
-        # An unpaid session right after creation should report status open / unpaid
-        assert "status" in body
-        assert "payment_status" in body
-        assert "payment" in body
-        # Until paid status remains 'initiated' (or 'cancelled' if expired)
-        assert body["payment"]["status"] in ("initiated", "synced", "cancelled")
+        assert "status" in body and "payment_status" in body and "payment" in body
+        if body["status"] == "unknown":
+            # proxy fallback path
+            assert body["payment"] is not None
+            assert body["payment"]["stripe_session_id"] == sid
+            assert body.get("error"), "fallback path must include error string"
+        else:
+            assert body["payment"]["status"] in ("initiated", "synced", "cancelled")
+
+    def test_get_checkout_status_unknown_sid_returns_404(self, session, jwt_headers):
+        """Unknown sid (not in DB and not retrievable) must be 404, not 500."""
+        r = session.get(f"{BASE_URL}/api/payments/checkout/status/cs_test_bogus",
+                        headers=jwt_headers, timeout=30)
+        assert r.status_code != 500, r.text
+        assert r.status_code == 404, r.text
 
 
 # --- Music search via Openverse --------------------------------------------

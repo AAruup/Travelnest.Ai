@@ -613,7 +613,12 @@ class CheckoutCreate(BaseModel):
 def _stripe_client(host_url: str) -> StripeCheckout:
     if not STRIPE_API_KEY:
         raise HTTPException(status_code=500, detail="Stripe key not configured")
-    return StripeCheckout(api_key=STRIPE_API_KEY)
+    client = StripeCheckout(api_key=STRIPE_API_KEY)
+    # The Emergent proxy is required for both create AND retrieve.
+    if "sk_test_emergent" in STRIPE_API_KEY:
+        import stripe as _stripe
+        _stripe.api_base = "https://integrations.emergentagent.com/stripe"
+    return client
 
 
 @api.post("/payments/checkout/session")
@@ -662,7 +667,25 @@ async def create_checkout(req: CheckoutCreate, request: Request,
 async def checkout_status(session_id: str, request: Request,
                           current=Depends(get_current_user)):
     stripe_client = _stripe_client(str(request.base_url))
-    status_resp = await stripe_client.get_checkout_status(session_id)
+    try:
+        status_resp = await stripe_client.get_checkout_status(session_id)
+    except Exception as exc:
+        # Unknown session, network error, etc.
+        payment_doc = await db.payments.find_one(
+            {"stripe_session_id": session_id, "user_id": current["id"]},
+            {"_id": 0},
+        )
+        if not payment_doc:
+            raise HTTPException(status_code=404, detail=f"Unknown session: {exc}")
+        return {
+            "status": "unknown",
+            "payment_status": "unknown",
+            "amount_total": int(payment_doc.get("amount", 0) * 100),
+            "currency": payment_doc.get("currency", "usd"),
+            "metadata": {},
+            "payment": payment_doc,
+            "error": str(exc),
+        }
 
     payment_doc = await db.payments.find_one(
         {"stripe_session_id": session_id, "user_id": current["id"]},

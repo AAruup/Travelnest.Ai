@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
-  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Image,
+  View, Text, StyleSheet, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -29,7 +29,8 @@ export default function ProfileScreen() {
   const [payee, setPayee] = useState('');
   const [savingPayment, setSavingPayment] = useState(false);
 
-  // Music search/save
+  // Logout confirmation modal
+  const [logoutOpen, setLogoutOpen] = useState(false);
   const [musicQuery, setMusicQuery] = useState('');
   const [musicResults, setMusicResults] = useState<{ id: string; title: string; creator: string; source: string; url: string }[]>([]);
   const [musicSearching, setMusicSearching] = useState(false);
@@ -95,14 +96,10 @@ export default function ProfileScreen() {
     finally { setMusicSaving(false); }
   };
 
-  const confirmLogout = () => {
-    Alert.alert('Logout', 'Sign out of TravelNest?', [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Logout', style: 'destructive', onPress: () => logout() },
-    ]);
-  };
+  const confirmLogout = () => setLogoutOpen(true);
+  const doLogout = async () => { setLogoutOpen(false); await logout(); };
 
-  const pending = payments.filter((p) => p.status === 'pending');
+  const pending = payments.filter((p) => p.status !== 'synced' && p.status !== 'cancelled');
   const synced = payments.filter((p) => p.status === 'synced');
 
   return (
@@ -249,6 +246,36 @@ export default function ProfileScreen() {
         <Text style={styles.footer}>TravelNest AI · v1.0 mobile</Text>
         <View style={{ height: spacing.xl }} />
       </ScrollView>
+
+      <Modal
+        visible={logoutOpen}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setLogoutOpen(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Sign out of TravelNest?</Text>
+            <Text style={styles.modalSub}>You will need to sign in again to access your trip.</Text>
+            <View style={styles.modalRow}>
+              <TouchableOpacity
+                testID="logout-cancel"
+                style={[styles.modalBtn, styles.modalCancel]}
+                onPress={() => setLogoutOpen(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                testID="logout-confirm"
+                style={[styles.modalBtn, styles.modalConfirm]}
+                onPress={doLogout}
+              >
+                <Text style={styles.modalConfirmText}>Logout</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -285,4 +312,14 @@ const styles = StyleSheet.create({
   logoutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm, backgroundColor: colors.surface, borderRadius: radius.pill, paddingVertical: 14, marginTop: spacing.lg, borderWidth: 1, borderColor: colors.danger },
   logoutText: { color: colors.danger, fontWeight: '800', fontSize: 15 },
   footer: { ...typography.micro, textAlign: 'center', marginTop: spacing.md },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(10,25,47,0.55)', alignItems: 'center', justifyContent: 'center', padding: spacing.lg },
+  modalCard: { backgroundColor: colors.surface, borderRadius: radius.xl, padding: spacing.lg, width: '100%', maxWidth: 360 },
+  modalTitle: { ...typography.h3, marginBottom: spacing.xs },
+  modalSub: { ...typography.small, marginBottom: spacing.md },
+  modalRow: { flexDirection: 'row', gap: spacing.sm },
+  modalBtn: { flex: 1, paddingVertical: 14, borderRadius: radius.pill, alignItems: 'center' },
+  modalCancel: { backgroundColor: colors.surfaceMuted },
+  modalConfirm: { backgroundColor: colors.danger },
+  modalCancelText: { color: colors.textPrimary, fontWeight: '700' },
+  modalConfirmText: { color: '#fff', fontWeight: '800' },
 });
